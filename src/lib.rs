@@ -7,7 +7,7 @@ pub mod text_input_pipeline;
 use std::collections::VecDeque;
 
 use actions::TextInputAction;
-use bevy::app::{Plugin, PostUpdate};
+use bevy::app::{Plugin, PostUpdate, PreUpdate};
 use bevy::asset::AssetEventSystems;
 use bevy::color::Color;
 use bevy::color::palettes::css::SKY_BLUE;
@@ -22,7 +22,9 @@ use bevy::ecs::resource::Resource;
 use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::ecs::system::Query;
 use bevy::ecs::world::DeferredWorld;
-use bevy::input_focus::InputFocus;
+use bevy::ecs::system::{Res, ResMut};
+use bevy::input::{ButtonInput, InputSystems, keyboard::KeyCode};
+use bevy::input_focus::{InputFocus, InputFocusSystems};
 use bevy::math::{Rect, Vec2};
 use bevy::prelude::ReflectComponent;
 use bevy::reflect::{Reflect, std_traits::ReflectDefault};
@@ -52,6 +54,12 @@ impl Plugin for TextInputPlugin {
             .init_resource::<TextInputGlobalState>()
             .init_resource::<TextInputPipeline>()
             .init_resource::<clipboard::Clipboard>()
+            .add_systems(
+                PreUpdate,
+                sync_modifier_keys
+                    .after(InputSystems)
+                    .before(InputFocusSystems::Dispatch),
+            )
             .add_systems(
                 PostUpdate,
                 (
@@ -423,6 +431,30 @@ pub fn update_text_input_contents(
         if contents.text != text {
             contents.text = text;
         }
+    }
+}
+
+/// Ensure shift (and command) flags are synced correctly so we will
+/// not submit on a plain Enter press.
+pub fn sync_modifier_keys(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut global_state: ResMut<TextInputGlobalState>,
+) {
+    let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
+    #[cfg(target_os = "macos")]
+    let command = keys.any_pressed([
+        KeyCode::ControlLeft,
+        KeyCode::ControlRight,
+        KeyCode::SuperLeft,
+        KeyCode::SuperRight,
+    ]);
+    #[cfg(not(target_os = "macos"))]
+    let command = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
+    if global_state.shift != shift {
+        global_state.shift = shift;
+    }
+    if global_state.command != command {
+        global_state.command = command;
     }
 }
 
