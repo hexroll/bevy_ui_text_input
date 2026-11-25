@@ -124,8 +124,8 @@ pub fn text_input_system(
 ) {
     for (node, text_font, text_input_layout_info, mut editor, input) in text_query.iter_mut() {
         let layout_info = text_input_layout_info.into_inner();
-        if editor.needs_update || text_font.is_changed() || node.is_changed() || input.is_changed()
-        {
+        let needs_rebuild = editor.needs_update || text_font.is_changed() || input.is_changed();
+        if needs_rebuild || node.is_changed() {
             let bounds = TextBounds {
                 width: Some(node.size().x),
                 height: Some(node.size().y),
@@ -146,9 +146,6 @@ pub fn text_input_system(
                     return Err(TextError::NoSuchFont);
                 }
 
-                let face_info =
-                    load_font_to_fontdb(&text_font, font_system, map_handle_to_font_id, &fonts);
-
                 let mut metrics = Metrics::new(text_font.font_size, line_height)
                     .scale(node.inverse_scale_factor().recip());
 
@@ -158,6 +155,14 @@ pub fn text_input_system(
                 buffer.set_metrics_and_size(font_system, metrics, bounds.width, bounds.height);
 
                 buffer.set_wrap(font_system, input.mode.wrap());
+
+                // Rebuild only when the font or input changed.
+                if !needs_rebuild {
+                    return Ok(());
+                }
+
+                let face_info =
+                    load_font_to_fontdb(&text_font, font_system, map_handle_to_font_id, &fonts);
 
                 let attrs = cosmic_text::Attrs::new()
                     .metadata(0)
